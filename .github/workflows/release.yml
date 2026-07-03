@@ -1,0 +1,146 @@
+name: release
+
+# Reusable auto-release for single-addon repos. Callers wire this up with
+# their own `on: schedule` + `workflow_dispatch` caller workflow (schedule
+# triggers only fire from the repo that owns the workflow file) and must
+# pass a `release_token` secret — a PAT that can push past branch protection,
+# since the default GITHUB_TOKEN is blocked by `enforce_admins`. Example
+# caller:
+#
+#   name: release
+#   on:
+#     schedule:
+#       - cron: '0 14 * * *'
+#     workflow_dispatch:
+#   permissions:
+#     contents: write
+#   concurrency:
+#     group: release
+#     cancel-in-progress: false
+#   jobs:
+#     release:
+#       uses: roshne/addon-ci/.github/workflows/release.yml@main
+#       secrets: inherit
+on:
+  workflow_call:
+    secrets:
+      release_token:
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required to find the previous release tag.
+          fetch-depth: 0
+          token: ${{ secrets.release_token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Tags/releases are prefixed with the repo name (e.g. ActionBarMaster-v12.0.7-r1)
+      # so a repo's tag history reads the same way as the wow monorepo's per-addon tags.
+      - name: Release if changed
+        env:
+          GH_TOKEN: ${{ secrets.release_token }}
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.event.repository.name }}"
+
+          toc=$(ls ./*.toc 2>/dev/null | head -1)
+          if [[ -z "$toc" ]]; then
+            echo "No .toc found at repo root — nothing to release."
+            exit 0
+          fi
+
+          bump_version() {
+            local ver="$1"
+            if [[ "$ver" =~ ^(.*[^0-9])([0-9]+)([^0-9]*)$ ]]; then
+              echo "${BASH_REMATCH[1]}$(( BASH_REMATCH[2] + 1 ))${BASH_REMATCH[3]}"
+            else
+              echo "$(( ver + 1 ))"
+            fi
+          }
+
+          last_tag=$(git tag -l "${REPO}-v*" | sort -V | tail -1 || true)
+
+          # Commits since the last tag, excluding doc-only (.md), unit tests
+          # (spec/), and maintainer tooling (tools/) — these never trigger a
+          # release. spec/ and tools/ are also excluded from the published
+          # zip in publish.yml.
+          pathspec=(":(exclude,glob)**/*.md" ":(exclude,glob)spec/**" ":(exclude,glob)tools/**")
+          if [[ -n "$last_tag" ]]; then
+            commit_log=$(git log "${last_tag}..HEAD" --pretty=format:"%s" -- . "${pathspec[@]}" || true)
+          else
+            commit_log=$(git log --pretty=format:"%s" -- . "${pathspec[@]}" || true)
+          fi
+
+          if [[ -z "$commit_log" ]]; then
+            echo "No changes to release."
+            exit 0
+          fi
+
+          current_version=$(grep -E "^## Version:" "$toc" | sed 's/## Version:[[:space:]]*//' | tr -d '\r')
+          if [[ -z "$current_version" ]]; then
+            echo "No ## Version: field in $toc — nothing to release."
+            exit 0
+          fi
+          new_version=$(bump_version "$current_version")
+          sed -i "s|^## Version:.*|## Version: ${new_version}|" "$toc"
+          echo "${REPO}: ${current_version} -> ${new_version}"
+
+          # Ordered so the changelog groups feat/fix/etc. sections consistently.
+          declare -A type_names=(
+            [feat]="Features" [fix]="Bug Fixes" [perf]="Performance"
+            [refactor]="Refactoring" [chore]="Maintenance" [doc]="Documentation"
+            [style]="Style" [test]="Tests" [build]="Build" [ci]="CI"
+          )
+          types_order=(feat fix perf refactor chore doc style test build ci)
+          declare -A type_entries
+          for t in "${types_order[@]}"; do type_entries[$t]=""; done
+          other_entries=""
+
+          while IFS= read -r msg; do
+            [[ -z "$msg" ]] && continue
+            matched=false
+            for t in "${types_order[@]}"; do
+              pattern="^${t}(\([^)]*\))?:[[:space:]]+(.+)$"
+              if [[ "$msg" =~ $pattern ]]; then
+                type_entries[$t]+="- ${BASH_REMATCH[2]}"$'\n'
+                matched=true
+                break
+              fi
+            done
+            [[ "$matched" == false ]] && other_entries+="- ${msg}"$'\n'
+          done <<< "$commit_log"
+
+          notes=""
+          for t in "${types_order[@]}"; do
+            if [[ -n "${type_entries[$t]}" ]]; then
+              notes+="### ${type_names[$t]}"$'\n'"${type_entries[$t]}"$'\n'
+            fi
+          done
+          [[ -n "$other_entries" ]] && notes+="### Other Changes"$'\n'"${other_entries}"$'\n'
+
+          notes_file=$(mktemp)
+          printf '%s' "$notes" > "$notes_file"
+
+          git add -A
+          git commit -m "chore(release): bump version"
+          git push
+
+          tag="${REPO}-v${new_version}"
+          git tag "$tag"
+          git push origin "$tag"
+
+          gh release create "$tag" \
+            --title "${REPO} v${new_version}" \
+            --notes-file "$notes_file"
+
+          rm -f "$notes_file"

@@ -29,17 +29,74 @@ jobs:
 Update the workflow here once and every repo pointing at `@main` picks it up on
 its next run.
 
+### `release.yml`
+
+Reusable auto-release for single-addon repos. On every run it checks commits
+since the addon's last `<repo>-v*` tag (ignoring doc-only, `spec/`, and
+`tools/` changes); if there's nothing new it's a no-op. Otherwise it bumps the
+last numeric segment of the `.toc`'s `## Version:` field, builds a changelog
+grouped by conventional-commit type, commits the bump, tags `<repo>-v<version>`,
+and creates a GitHub release.
+
+Schedule triggers only fire from the repo that owns the workflow file, so each
+consumer needs its own thin caller at `.github/workflows/release.yml`:
+
+```yaml
+name: release
+
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: roshne/addon-ci/.github/workflows/release.yml@main
+    secrets: inherit
+```
+
+Requires a `RELEASE_TOKEN` repo secret — a PAT that can push past branch
+protection (the default `GITHUB_TOKEN` is blocked when `enforce_admins` is on).
+
+### `publish.yml`
+
+Reusable CurseForge publisher for single-addon repos. Triggered when a GitHub
+release is published, it reads `## X-Curse-Project-ID:` and `## Interface:`
+from the repo-root `.toc`, zips the repo (excluding `spec/` and `tools/`), and
+uploads to CurseForge via `itsmeow/curseforge-upload`. Safe to add before the
+CurseForge project exists — it silently skips if `X-Curse-Project-ID` is
+absent from the `.toc`.
+
+```yaml
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  curseforge:
+    uses: roshne/addon-ci/.github/workflows/publish.yml@main
+    secrets: inherit
+```
+
+Requires a `CURSEFORGE_API_TOKEN` repo secret (from CurseForge account →
+Settings → API Tokens).
+
 ## Consumers
 
 - BetterMacroIcons
 - HideCooldownManager
 - LoadTimer
-- ActionBarMaster
+- ActionBarMaster (also uses `release.yml` + `publish.yml`)
 
 Forks (MinimapButtonButton, AlreadyKnown) keep their own workflows because they
 track upstream. Altoholic_Reborn is retired/archived.
-
-## Planned
-
-- `release.yml` — reusable CurseForge publishing (BigWigsMods/packager) for when
-  the first addon ships to CurseForge.

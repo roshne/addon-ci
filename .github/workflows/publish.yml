@@ -1,0 +1,124 @@
+name: publish
+
+# Reusable CurseForge publisher for single-addon repos. Only publishes if the
+# repo's .toc declares `## X-Curse-Project-ID:` — safe to wire up before the
+# CurseForge project ID is known. Callers wire this up with their own
+# `on: release: types: [published]` + `workflow_dispatch` caller workflow and
+# must pass a `curseforge_api_token` secret. Example caller:
+#
+#   name: publish
+#   on:
+#     release:
+#       types: [published]
+#     workflow_dispatch:
+#   jobs:
+#     curseforge:
+#       uses: roshne/addon-ci/.github/workflows/publish.yml@main
+#       secrets: inherit
+on:
+  workflow_call:
+    secrets:
+      curseforge_api_token:
+        required: true
+
+jobs:
+  curseforge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate ref is a release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ ! "${{ github.ref_name }}" =~ ^[A-Za-z_]+-v[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
+            echo "Error: must be run from a release tag (e.g. ActionBarMaster-v12.0.7-r1), got: ${{ github.ref_name }}"
+            exit 1
+          fi
+
+      - name: Resolve tag and release info
+        id: info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.ref_name }}"
+            BODY=$(gh release view "$TAG" --repo "${{ github.repository }}" --json body --jq .body)
+            PRERELEASE=$(gh release view "$TAG" --repo "${{ github.repository }}" --json isPrerelease --jq .isPrerelease)
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            BODY="${{ github.event.release.body }}"
+            PRERELEASE="${{ github.event.release.prerelease }}"
+          fi
+
+          echo "tag=$TAG"               >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "body<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.info.outputs.tag }}
+
+      # Reads X-Curse-Project-ID and Interface from the repo-root .toc.
+      # An addon is only published if X-Curse-Project-ID is present.
+      # Interface values (e.g. "120005" or "110002, 110005") are converted to
+      # CurseForge game version strings: XXYYZZ -> X.Y.Z (leading zeros stripped).
+      - name: Read .toc metadata
+        id: toc
+        run: |
+          TOC=$(ls ./*.toc | head -1)
+
+          PROJECT_ID=$(grep -E "^## X-Curse-Project-ID:" "$TOC" \
+            | sed 's/## X-Curse-Project-ID:[[:space:]]*//' | tr -d '\r')
+
+          if [[ -z "$PROJECT_ID" ]]; then
+            echo "No X-Curse-Project-ID in $TOC — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
+          echo "skip=false"             >> "$GITHUB_OUTPUT"
+
+          IFACE_RAW=$(grep -E "^## Interface:" "$TOC" \
+            | sed 's/## Interface:[[:space:]]*//' | tr -d '\r')
+
+          GAME_VERSIONS=""
+          IFS=',' read -ra IFACES <<< "$IFACE_RAW"
+          for iface in "${IFACES[@]}"; do
+            iface=$(echo "$iface" | tr -d ' ')
+            major=$(( 10#${iface:0:2} ))
+            minor=$(( 10#${iface:2:2} ))
+            patch=$(( 10#${iface:4:2} ))
+            ver="${major}.${minor}.${patch}"
+            GAME_VERSIONS="${GAME_VERSIONS:+${GAME_VERSIONS},}${ver}"
+          done
+
+          echo "game_versions=$GAME_VERSIONS" >> "$GITHUB_OUTPUT"
+
+      # Zip the repo contents so it installs correctly into AddOns/<repo-name>.
+      # spec/ holds busted unit tests and tools/ holds maintainer-only scripts —
+      # never ship either.
+      - name: Package addon zip
+        if: steps.toc.outputs.skip != 'true'
+        run: |
+          REPO="${{ github.event.repository.name }}"
+          mkdir -p "/tmp/pkg/${REPO}"
+          rsync -a --exclude='.git*' --exclude='spec' --exclude='tools' ./ "/tmp/pkg/${REPO}/"
+          (cd /tmp/pkg && zip -r "${GITHUB_WORKSPACE}/${REPO}.zip" "${REPO}/")
+
+      - name: Upload to CurseForge
+        if: steps.toc.outputs.skip != 'true'
+        uses: itsmeow/curseforge-upload@master
+        with:
+          token: ${{ secrets.curseforge_api_token }}
+          game_endpoint: wow
+          project_id: ${{ steps.toc.outputs.project_id }}
+          changelog: ${{ steps.info.outputs.body }}
+          changelog_type: markdown
+          release_type: ${{ steps.info.outputs.prerelease == 'true' && 'beta' || 'release' }}
+          game_versions: ${{ steps.toc.outputs.game_versions }}
+          file_path: "${{ github.event.repository.name }}.zip"
