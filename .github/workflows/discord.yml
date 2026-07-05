@@ -23,7 +23,9 @@ name: discord
 on:
   workflow_call:
     secrets:
-      discord_webhook:
+      # Exact uppercase name — `secrets: inherit` resolves by literal secret
+      # name, and an optional lowercase alias can silently come up empty.
+      DISCORD_WEBHOOK:
         required: false
 
 jobs:
@@ -37,7 +39,7 @@ jobs:
       - name: Check webhook is configured
         id: guard
         env:
-          WEBHOOK: ${{ secrets.discord_webhook }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           if [[ -z "$WEBHOOK" ]]; then
             echo "DISCORD_WEBHOOK secret not set — skipping notification."
@@ -50,7 +52,7 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         uses: sarisia/actions-status-discord@v1.15.5
         with:
-          webhook: ${{ secrets.discord_webhook }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
           notimestamp: true
           noprefix: true
           nocontext: true
