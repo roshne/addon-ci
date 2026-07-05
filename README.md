@@ -91,6 +91,34 @@ jobs:
 Requires a `CURSEFORGE_API_TOKEN` repo secret (from CurseForge account →
 Settings → API Tokens).
 
+### `discord.yml`
+
+Reusable Discord notification for single-addon repos. Posts a one-line summary
+(PR number, title, merger) to a Discord webhook. Callers trigger on
+`pull_request` closed so only merged PRs post — never per-push spam, and the
+daily `chore(release): bump version` bot push stays silent. Safe to add before
+the webhook exists — it skips cleanly if the `DISCORD_WEBHOOK` secret is unset.
+
+```yaml
+name: discord
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  notify:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    uses: roshne/addon-ci/.github/workflows/discord.yml@main
+    secrets: inherit
+```
+
+Requires a `DISCORD_WEBHOOK` repo secret (Discord channel → Integrations →
+Webhooks). `workflow_dispatch` fires a test notification without merging
+anything.
+
 ## Consumers
 
 - BetterMacroIcons

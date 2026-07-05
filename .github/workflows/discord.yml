@@ -1,0 +1,66 @@
+# https://github.com/marketplace/actions/actions-status-discord
+
+name: discord
+
+# Reusable merged-PR Discord notification for single-addon repos. Callers
+# trigger on pull_request closed so only merged PRs post — never per-push
+# spam, and the daily `chore(release): bump version` bot push stays silent.
+# Posts nothing (green skip, not a failure) when the caller repo has no
+# DISCORD_WEBHOOK secret yet. Example caller:
+#
+#   name: discord
+#   on:
+#     pull_request:
+#       types: [closed]
+#       branches: [main]
+#     workflow_dispatch:
+#   jobs:
+#     notify:
+#       if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+#       uses: roshne/addon-ci/.github/workflows/discord.yml@main
+#       secrets: inherit
+
+on:
+  workflow_call:
+    secrets:
+      discord_webhook:
+        required: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+      # The secrets context is unavailable in job-level `if`, so gate on the
+      # webhook in a step: repos that haven't configured DISCORD_WEBHOOK yet
+      # skip cleanly instead of failing every merge.
+      - name: Check webhook is configured
+        id: guard
+        env:
+          WEBHOOK: ${{ secrets.discord_webhook }}
+        run: |
+          if [[ -z "$WEBHOOK" ]]; then
+            echo "DISCORD_WEBHOOK secret not set — skipping notification."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post to Discord
+        if: steps.guard.outputs.skip != 'true'
+        uses: sarisia/actions-status-discord@v1.15.5
+        with:
+          webhook: ${{ secrets.discord_webhook }}
+          notimestamp: true
+          noprefix: true
+          nocontext: true
+          title: "${{ github.repository }}"
+          description: >-
+            ${{ github.event_name == 'pull_request'
+                && format('[#{0}]({1}) {2} — merged by {3}',
+                          github.event.pull_request.number,
+                          github.event.pull_request.html_url,
+                          github.event.pull_request.title,
+                          github.actor)
+                || format('Test notification fired by {0}', github.actor) }}
+          url: "${{ github.server_url }}/${{ github.repository }}"
