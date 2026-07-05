@@ -44,15 +44,23 @@ jobs:
           if [[ -z "$WEBHOOK" ]]; then
             echo "DISCORD_WEBHOOK secret not set — skipping notification."
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          # Discord's GitHub-compat endpoint (…/github) only accepts GitHub
+          # event payloads — plain embeds get 400 {"sender": required}. Strip
+          # the suffix so the URL saved for the native GitHub→Discord
+          # integration works here too. The stripped value is a substring of
+          # the secret, so re-mask it before it leaves the step as an output.
+          CLEAN="${WEBHOOK%/github}"
+          echo "::add-mask::$CLEAN"
+          echo "webhook=$CLEAN" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Post to Discord
         if: steps.guard.outputs.skip != 'true'
         uses: sarisia/actions-status-discord@v1.15.5
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          webhook: ${{ steps.guard.outputs.webhook }}
           notimestamp: true
           noprefix: true
           nocontext: true
