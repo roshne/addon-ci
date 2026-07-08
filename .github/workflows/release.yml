@@ -68,13 +68,41 @@ jobs:
             fi
           }
 
+          # Prepend a release entry (newest first) to the addon's in-game changelog
+          # data file. Opt-in: only touches it when the repo ships a changelog.lua +
+          # toc entry (see LibNAddOn's changelog viewer) — never creates the file, so
+          # a repo that hasn't wired up the viewer is left untouched. The notes body
+          # is the same markdown grouping written to the GitHub release, wrapped in a
+          # Lua long string.
+          prepend_changelog() {
+            local changelog="$1" version="$2" notes_file="$3"
+            [[ -f "$changelog" ]] || return 0
+            local entry_file
+            entry_file=$(mktemp)
+            {
+              printf '  { version = "%s", notes = [==[\n' "$version"
+              sed -e 's/[[:space:]]*$//' "$notes_file"
+              printf ']==] },\n'
+            } > "$entry_file"
+            # Insert the new entry immediately after the `ns.changelog = {` opening line.
+            awk -v ef="$entry_file" '
+              { print }
+              /^ns\.changelog = \{/ && !inserted {
+                while ((getline line < ef) > 0) print line
+                close(ef); inserted = 1
+              }
+            ' "$changelog" > "${changelog}.tmp" && mv "${changelog}.tmp" "$changelog"
+            rm -f "$entry_file"
+          }
+
           last_tag=$(git tag -l "${REPO}-v*" | sort -V | tail -1 || true)
 
           # Commits since the last tag, excluding doc-only (.md), unit tests
-          # (spec/), and maintainer tooling (tools/) — these never trigger a
-          # release. spec/ and tools/ are also excluded from the published
-          # zip in publish.yml.
-          pathspec=(":(exclude,glob)**/*.md" ":(exclude,glob)spec/**" ":(exclude,glob)tools/**")
+          # (spec/), maintainer tooling (tools/), and the in-game changelog data
+          # file (changelog.lua, auto-appended below — must not self-trigger a
+          # release) — these never trigger a release. spec/ and tools/ are also
+          # excluded from the published zip in publish.yml.
+          pathspec=(":(exclude,glob)**/*.md" ":(exclude,glob)spec/**" ":(exclude,glob)tools/**" ":(exclude)changelog.lua")
           if [[ -n "$last_tag" ]]; then
             commit_log=$(git log "${last_tag}..HEAD" --pretty=format:"%s" -- . "${pathspec[@]}" || true)
           else
@@ -130,6 +158,10 @@ jobs:
 
           notes_file=$(mktemp)
           printf '%s' "$notes" > "$notes_file"
+
+          # Append this release to the addon's in-game changelog (opt-in; no-op
+          # if the repo hasn't shipped a changelog.lua for the viewer).
+          prepend_changelog "changelog.lua" "$new_version" "$notes_file"
 
           git add -A
           git commit -m "chore(release): bump version"
