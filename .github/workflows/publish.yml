@@ -114,8 +114,9 @@ jobs:
       # Zip the repo contents so it installs correctly into AddOns/<repo-name>.
       # Ships the runtime files plus README + LICENSE, and strips everything an
       # end user doesn't need: VCS/CI (.git*), tests (spec/), maintainer scripts
-      # (tools/), Claude/developer docs (CLAUDE.md, CONTEXT.md, CONTRIBUTING.md),
-      # and lint/test configs (.luacheckrc, .luarc.json, .busted, .editorconfig).
+      # (tools/), branding art (assets/), Claude/developer docs (CLAUDE.md,
+      # CONTEXT.md, CONTRIBUTING.md), and lint/test configs (.luacheckrc,
+      # .luarc.json, .busted, .editorconfig).
       - name: Package addon zip
         if: steps.toc.outputs.skip != 'true'
         env:
@@ -123,7 +124,7 @@ jobs:
         run: |
           mkdir -p "/tmp/pkg/${REPO}"
           rsync -a \
-            --exclude='.git*' --exclude='spec' --exclude='tools' \
+            --exclude='.git*' --exclude='spec' --exclude='tools' --exclude='assets' \
             --exclude='CLAUDE.md' --exclude='CONTEXT.md' --exclude='CONTRIBUTING.md' \
             --exclude='.luacheckrc' --exclude='.luarc.json' \
             --exclude='.busted' --exclude='.editorconfig' \

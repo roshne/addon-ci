@@ -98,11 +98,12 @@ jobs:
           last_tag=$(git tag -l "${REPO}-v*" | sort -V | tail -1 || true)
 
           # Commits since the last tag, excluding doc-only (.md), unit tests
-          # (spec/), maintainer tooling (tools/), and the in-game changelog data
-          # file (changelog.lua, auto-appended below — must not self-trigger a
-          # release) — these never trigger a release. spec/ and tools/ are also
-          # excluded from the published zip in publish.yml.
-          pathspec=(":(exclude,glob)**/*.md" ":(exclude,glob)spec/**" ":(exclude,glob)tools/**" ":(exclude)changelog.lua")
+          # (spec/), maintainer tooling (tools/), branding art (assets/), and the
+          # in-game changelog data file (changelog.lua, auto-appended below — must
+          # not self-trigger a release) — these never trigger a release. spec/,
+          # tools/, and assets/ are also excluded from the published zip in
+          # publish.yml.
+          pathspec=(":(exclude,glob)**/*.md" ":(exclude,glob)spec/**" ":(exclude,glob)tools/**" ":(exclude,glob)assets/**" ":(exclude)changelog.lua")
           if [[ -n "$last_tag" ]]; then
             commit_log=$(git log "${last_tag}..HEAD" --pretty=format:"%s" -- . "${pathspec[@]}" || true)
           else
