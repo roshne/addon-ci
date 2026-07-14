@@ -1,0 +1,83 @@
+name: push-notify
+
+# Reusable push-to-main Discord notification for repos wired into the community
+# server. A caller triggers on `push` to its default branch, and this posts ONE
+# embed per push -- rendered as "Github-Repo-Updates" (the webhook's own name),
+# NOT Discord's hard-coded "GitHub" sender that the native `/github` webhook forces.
+# Because the caller only fires on main, a feature-branch push + its squash-merge
+# no longer double-post (roshne/Tooling#111 follow-up). Posts nothing (green skip)
+# when the caller repo has no DISCORD_PUSH_WEBHOOK secret. Example caller:
+#
+#   name: push-notify
+#   on:
+#     push:
+#       branches: [main]
+#   jobs:
+#     notify:
+#       uses: roshne/addon-ci/.github/workflows/push-notify.yml@main
+#       secrets: inherit
+
+on:
+  workflow_call:
+    secrets:
+      DISCORD_PUSH_WEBHOOK:
+        required: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    steps:
+      # The secrets context is unavailable in a job-level `if`, so gate in a step:
+      # a repo without the secret skips cleanly instead of failing every push.
+      - name: Check webhook is configured
+        id: guard
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_PUSH_WEBHOOK }}
+        run: |
+          if [[ -z "$WEBHOOK" ]]; then
+            echo "DISCORD_PUSH_WEBHOOK not set -- skipping notification."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Post native embeds to the BASE webhook URL so the sender is the
+          # webhook's own name ("Github-Repo-Updates"), not the `/github`
+          # endpoint's fixed "GitHub". Strip a trailing /github if the secret was
+          # saved for the native integration. Re-mask the stripped substring.
+          CLEAN="${WEBHOOK%/github}"
+          echo "::add-mask::$CLEAN"
+          echo "webhook=$CLEAN" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Post commit(s) to Discord
+        if: steps.guard.outputs.skip != 'true'
+        # head_commit.message is untrusted (author-controlled) -- it reaches the
+        # shell only via env + `jq --arg` (which JSON-escapes it), never spliced
+        # into the payload string, so a crafted commit message can't break out.
+        env:
+          WEBHOOK: ${{ steps.guard.outputs.webhook }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          MSG: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.event.head_commit.id }}
+          URL: ${{ github.event.head_commit.url }}
+          AUTHOR: ${{ github.event.head_commit.author.username }}
+          COMMITS: ${{ toJSON(github.event.commits) }}
+        run: |
+          set -euo pipefail
+          # Nothing to say for a branch delete / zero-commit push.
+          if [[ -z "${SHA:-}" ]]; then
+            echo "No head commit (delete or zero-commit push) -- skipping."
+            exit 0
+          fi
+          n=$(printf '%s' "${COMMITS:-[]}" | jq 'length')
+          short="${SHA:0:7}"
+          first_line="${MSG%%$'\n'*}"
+          title="[${REPO}:${BRANCH}] ${n} new commit"
+          [[ "$n" == "1" ]] || title="${title}s"
+          payload=$(jq -n \
+            --arg username "Github-Repo-Updates" \
+            --arg title "$title" \
+            --arg desc "[\`${short}\`](${URL}) ${first_line} - ${AUTHOR}" \
+            '{username: $username, embeds: [{title: $title, description: $desc, color: 2369326}]}')
+          curl -sfS -H "Content-Type: application/json" -d "$payload" "$WEBHOOK"
