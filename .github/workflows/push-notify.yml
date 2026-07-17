@@ -16,16 +16,27 @@ name: push-notify
 #     notify:
 #       uses: roshne/addon-ci/.github/workflows/push-notify.yml@main
 #       secrets: inherit
+#       # with: { runner: '["self-hosted","linux"]' }   # optional: run on your own runner
 
 on:
   workflow_call:
+    inputs:
+      runner:
+        description: >-
+          runs-on labels for the notify job, as a JSON-array *string*. Defaults to
+          hosted Ubuntu; pass a self-hosted set (e.g. '["self-hosted","linux"]') to
+          keep this off billed minutes. The job runs on the CALLER's runners, so a
+          caller with a self-hosted runner needs no other change.
+        type: string
+        required: false
+        default: '["ubuntu-latest"]'
     secrets:
       DISCORD_PUSH_WEBHOOK:
         required: false
 
 jobs:
   post:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
 
     steps:
       # The secrets context is unavailable in a job-level `if`, so gate in a step:
