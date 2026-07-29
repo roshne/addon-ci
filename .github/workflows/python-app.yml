@@ -1,0 +1,113 @@
+name: python-app
+
+# Reusable Python CI -- the Python analog of lua-test.yml beside it: define-once,
+# call-everywhere via `workflow_call`, and the same detect-then-run idiom so a repo
+# stays green with ZERO config and each gate activates the moment its config
+# appears. pytest runs whenever the test path exists; ruff (lint+format) and mypy
+# run only once their config is present, so they can be turned on per repo without
+# editing this file or the caller.
+#
+# Callers (a thin job, mirroring how BMI's ci.yml calls lua-test.yml):
+#
+#   jobs:
+#     python:
+#       uses: roshne/addon-ci/.github/workflows/python-app.yml@main
+#       with:
+#         package-dir: .                    # what ruff/mypy target
+#         test-paths: tests
+#         requirements: requirements-dev.txt
+#
+# Extracted here from roshne/artifacts-console (issue #161), which had grown a
+# byte-identical copy in roshne/Tooling -- two repos maintaining one workflow by
+# hand, which is the duplication this repo exists to end.
+#
+# **roshne/artifacts-console deliberately keeps its own in-repo copy** and does NOT
+# call this one. It is the reference/POC repo: a stranger who forks it must inherit
+# CI that works without depending on a roshne repo they cannot see (issue #162), and
+# a `uses: roshne/addon-ci` in shipped CI re-personalises the fork. So the two files
+# are knowingly duplicated; a change to one belongs in the other.
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: "JSON array of Python versions to matrix over."
+        type: string
+        default: '["3.12"]'
+      package-dir:
+        description: "Directory ruff/mypy target (and where their config is looked for)."
+        type: string
+        default: "."
+      test-paths:
+        description: "Path passed to pytest; skipped when it does not exist."
+        type: string
+        default: "tests"
+      requirements:
+        description: "pip requirements file to install before the tests (if present)."
+        type: string
+        default: "requirements-dev.txt"
+      ruff-format:
+        description: "Also enforce `ruff format --check` (the opinionated formatter). Off by default: `ruff check` is the low-churn lint gate; the formatter reflows whole files."
+        type: boolean
+        default: false
+      mypy-paths:
+        description: "Paths mypy checks; defaults to package-dir. Lets mypy target a typed subset (e.g. one package) while ruff lints the whole repo."
+        type: string
+        default: ""
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ${{ fromJSON(inputs.python-versions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install requirements (if present)
+        run: |
+          if [ -f '${{ inputs.requirements }}' ]; then
+            pip install -r '${{ inputs.requirements }}'
+          else
+            echo "No '${{ inputs.requirements }}' -- skipping dependency install."
+          fi
+
+      # Detect-then-run, like lua-test.yml's busted step: the lint/type gates turn
+      # on automatically once their config exists, and stay out of the way until then.
+      - name: Ruff lint (and format --check if enabled), only when configured
+        run: |
+          pkg='${{ inputs.package-dir }}'
+          if [ -f "$pkg/ruff.toml" ] || [ -f "$pkg/.ruff.toml" ] || [ -f ruff.toml ] || [ -f .ruff.toml ] \
+             || grep -qs '^\[tool\.ruff' "$pkg/pyproject.toml" pyproject.toml; then
+            pip install ruff
+            ruff check "$pkg"
+            if [ '${{ inputs.ruff-format }}' = 'true' ]; then
+              ruff format --check "$pkg"
+            fi
+          else
+            echo "No ruff config (ruff.toml or [tool.ruff]) -- skipping lint."
+          fi
+
+      - name: mypy type-check (only if configured)
+        run: |
+          pkg='${{ inputs.package-dir }}'
+          target='${{ inputs.mypy-paths }}'; [ -n "$target" ] || target="$pkg"
+          if [ -f "$pkg/mypy.ini" ] || [ -f mypy.ini ] \
+             || grep -qs '^\[tool\.mypy' "$pkg/pyproject.toml" pyproject.toml \
+             || grep -qs '^\[mypy\]' "$pkg/setup.cfg" setup.cfg; then
+            pip install mypy
+            mypy "$target"
+          else
+            echo "No mypy config ([tool.mypy] / mypy.ini) -- skipping type-check."
+          fi
+
+      - name: pytest (if tests exist)
+        run: |
+          if [ -d '${{ inputs.test-paths }}' ]; then
+            python -m pytest '${{ inputs.test-paths }}'
+          else
+            echo "No tests at '${{ inputs.test-paths }}' -- skipping."
+          fi
