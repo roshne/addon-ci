@@ -15,8 +15,21 @@ name: push-notify
 #   jobs:
 #     notify:
 #       uses: roshne/addon-ci/.github/workflows/push-notify.yml@main
-#       secrets: inherit
+#       secrets:
+#         DISCORD_PUSH_WEBHOOK: ${{ secrets.DISCORD_PUSH_WEBHOOK }}
 #       # with: { runner: '["self-hosted","linux"]' }   # optional: run on your own runner
+#
+# Pass the secret EXPLICITLY, as above -- do NOT use `secrets: inherit` here. If the
+# caller lives in a FREE organization and is PRIVATE, it cannot access org-level
+# secrets, yet `inherit` still resolves DISCORD_PUSH_WEBHOOK to that inaccessible ORG
+# secret and hands this workflow an empty string -- SHADOWING a perfectly good
+# repo-level secret. The guard below then skips GREEN, so the caller's CI passes and
+# no notification is ever sent: a silent, invisible failure. Explicit passing is
+# evaluated in the caller's own context, which resolves repo-level first and falls
+# back to org-level, and is therefore correct for private and public callers alike.
+# Diagnosed 2026-09-02 across the Rackbops org (Rackbops/the-keeper#5): a length
+# probe showed the repo secret present at 121 chars while `inherit` delivered empty;
+# switching to explicit passing fixed all 8 repos, public and private.
 
 on:
   workflow_call:
