@@ -47,9 +47,11 @@ on:
       DISCORD_PUSH_WEBHOOK:
         required: false
 
+# timeout-minutes on every job bounds a hung step to minutes, not the 360-minute pool-slot default (Rackbops/Tooling#498).
 jobs:
   post:
     runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 5
 
     steps:
       # The secrets context is unavailable in a job-level `if`, so gate in a step:
