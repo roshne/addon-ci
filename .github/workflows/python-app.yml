@@ -16,6 +16,7 @@ name: python-app
 #         package-dir: .                    # what ruff/mypy target
 #         test-paths: tests
 #         requirements: requirements-dev.txt
+#         # runner: '["self-hosted","disposable"]'   # optional: run on your own runner
 #
 # Extracted here from roshne/artifacts-console (issue #161), which had grown a
 # byte-identical copy in roshne/Tooling -- two repos maintaining one workflow by
@@ -54,10 +55,18 @@ on:
         description: "Paths mypy checks; defaults to package-dir. Lets mypy target a typed subset (e.g. one package) while ruff lints the whole repo."
         type: string
         default: ""
+      runner:
+        description: >-
+          runs-on labels for the quality job, as a JSON-array *string*. Defaults to
+          hosted Ubuntu; pass a self-hosted set (e.g. '["self-hosted","disposable"]') to
+          keep this off billed minutes. Same shape as push-notify.yml's `runner` input.
+        type: string
+        required: false
+        default: '["ubuntu-latest"]'
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
     strategy:
       matrix:
         python-version: ${{ fromJSON(inputs.python-versions) }}
