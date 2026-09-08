@@ -64,9 +64,11 @@ on:
         required: false
         default: '["ubuntu-latest"]'
 
+# timeout-minutes on every job bounds a hung step to minutes, not the 360-minute pool-slot default (Rackbops/Tooling#498).
 jobs:
   quality:
     runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 15
     strategy:
       matrix:
         python-version: ${{ fromJSON(inputs.python-versions) }}
