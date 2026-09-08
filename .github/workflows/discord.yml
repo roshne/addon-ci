@@ -58,7 +58,7 @@ jobs:
 
       - name: Post to Discord
         if: steps.guard.outputs.skip != 'true'
-        uses: sarisia/actions-status-discord@v1.15.5
+        uses: sarisia/actions-status-discord@v1.16.0
         with:
           webhook: ${{ steps.guard.outputs.webhook }}
           notimestamp: true
