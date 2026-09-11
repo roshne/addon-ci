@@ -173,6 +173,74 @@ versions to matrix over (default `["3.12"]`), and `package-dir`, `test-paths`,
 `requirements`, `ruff-format`, `mypy-paths`, and `runner` all default to the
 layout shown above.
 
+## Actions
+
+Composite actions, used as a **step** inside the caller's own job (unlike the
+reusable workflows above, which run as their own job on their own runner).
+
+### `playwright-smoke`
+
+Runs a Playwright suite against a URL from inside the calling job, with Chromium
+provided by Playwright's official container image -- for the assertions jsdom
+cannot make (computed styles, media queries, layout, a page reconnecting after
+its server restarts). The suite's own `npm ci` + `npx playwright test` run inside
+the container with the workspace bind-mounted, so no browsers are installed on
+the runner itself (the container writes `node_modules/`, `playwright-report/`
+and `test-results/` under `spec-dir` on the runner's disk -- see the re-own note
+below); the container joins the host network so a base URL bound on the runner's
+loopback (a port a DinD runner published from an inner container included) is
+reachable as-is. On failure the HTML report and `test-results` are uploaded as
+an artifact.
+
+It has to be a composite action, not a reusable workflow: a `workflow_call` job
+lands on its own runner and cannot see the app the caller just booted. And it
+runs the suite in a container rather than `playwright install --with-deps` on
+the runner because an ephemeral DinD runner has no apt to install browser
+dependencies into; the official image is the path the std-lib's visual job
+already proves.
+
+`--network host` is Linux-only Docker semantics: both the self-hosted DinD pool
+and `ubuntu-latest` are Linux dockerd, so this works identically on either, but
+the action is not usable from a Windows- or macOS-hosted runner (Docker
+Desktop's VM-backed engine does not support host networking the same way) --
+moot today since the pinned Playwright image is Linux-only anyway and would
+fail to run there first, but worth knowing if that ever changes.
+
+```yaml
+- uses: roshne/addon-ci/.github/actions/playwright-smoke@main
+  with:
+    base-url: http://127.0.0.1:8787
+    spec-dir: scripts/shell-smoke
+    mount-docker-socket: "true"
+    container-env: |
+      AC_CONTAINER=ac-ratchet
+```
+
+| Input | Required | Default | What |
+|---|---|---|---|
+| `base-url` | yes | -- | The URL the suite runs against; exported to the container as `BASE_URL`. |
+| `spec-dir` | no | `.` | Directory (relative to the workspace) with the suite's own `package.json` + `package-lock.json` and `playwright.config.*`; `npm ci` and `npx playwright test` run there. |
+| `playwright-image` | no | `mcr.microsoft.com/playwright:v1.63.0-noble` | The Playwright container image. Its version must match the suite's `@playwright/test` pin. |
+| `mount-docker-socket` | no | `"false"` | `"true"` bind-mounts `/var/run/docker.sock` so the spec can drive containers through the Docker Engine API (stop/start the app and assert the page reconnects). This is root-equivalent control of the runner's daemon -- only for a suite you own, on a runner thrown away after the job. |
+| `extra-args` | no | `""` | Extra arguments for `npx playwright test`, split on whitespace only -- shell quoting is not interpreted, so no argument can contain a space. |
+| `report-name` | no | `playwright-report` | Artifact name for the report uploaded on failure. |
+| `container-env` | no | `""` | Newline-separated `KEY=VALUE` pairs exported into the container. Blank lines ignored, whitespace trimmed; a line without `=` fails the step. |
+
+Files the container writes under `spec-dir` (`node_modules/`, `playwright-report/`,
+`test-results/`) are re-owned to the runner user afterwards, so a persistent
+runner's next checkout still cleans.
+
+The first consumer (`Rackbops/artifact-console`'s image ratchet) pins `@main`
+for now: `v1` predates the action, so there is nothing for `@v1` to resolve
+until the tag is next moved deliberately (see **Versioning**), and it switches
+to `@v1` then. That is a third, org-repo category distinct from both
+**Versioning**'s two named ones -- `@v1` for org callers, `@main` by design for
+the personal-account consumers below -- not `@<sha>` (Versioning's own stated
+interim-verification mechanism), because there is no tagged version yet to
+verify *against*; `@main` is this consumer's only option until the first `v1`
+move. Treat this case as specific to a brand-new action with no tag history
+yet, not as precedent for an org repo floating on `@main` once `v1` exists.
+
 ## Versioning
 
 Callers pin `@v1`, not `@main`. A change lands on `main` and is verified on
