@@ -1,4 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>Rackbops/renovate-config"]
+  "extends": ["github>Rackbops/renovate-config"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Playwright container image the playwright-smoke action defaults to, bumped like any other dependency.",
+      "managerFilePatterns": ["/^\\.github/actions/[^/]+/action\\.ya?ml$/"],
+      "matchStrings": ["mcr\\.microsoft\\.com/playwright:(?<currentValue>v[\\d.]+-noble)"],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "mcr.microsoft.com/playwright",
+      "versioningTemplate": "docker"
+    }
+  ]
 }

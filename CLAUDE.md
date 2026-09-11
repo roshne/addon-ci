@@ -20,7 +20,9 @@ touched -- `release`, `publish`, `push-notify`, `python-app`, ... Match what the
 The **workflow YAML on disk is the source** (`.github/workflows/*.yml`); cite `file:line`.
 `README.md` documents each workflow and the exact caller snippet a consumer pastes -- keep the two
 in sync when a workflow's inputs, secrets, or trigger change. Six reusable workflows exist today:
-`lua-test`, `release`, `publish`, `discord`, `push-notify`, `python-app`.
+`lua-test`, `release`, `publish`, `discord`, `push-notify`, `python-app` -- and one composite action,
+`playwright-smoke` (`.github/actions/playwright-smoke/action.yml`), used as a step inside a caller's
+job rather than as a job of its own.
 
 **There is deliberately no `CONTEXT.md`.** A workflows-only repo has no paid-for-once toolchain
 ledger beyond the YAML itself plus the README -- a `CONTEXT.md` would be dead weight (same call as

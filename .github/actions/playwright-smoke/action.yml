@@ -1,0 +1,109 @@
+name: playwright-smoke
+description: >-
+  Run a Playwright suite against a URL from inside the calling job, with Chromium provided by
+  Playwright's official container image. A composite action (not a reusable workflow) on purpose: a
+  workflow_call job lands on its own runner and cannot see the app the caller just booted, whereas a
+  step runs beside it. The suite's own `npm ci` + `npx playwright test` run inside the container with
+  the workspace bind-mounted, so the caller never installs browsers on the runner (an ephemeral DinD
+  runner has no apt to `playwright install --with-deps` into; the container is the path the std-lib's
+  visual job already proves). The container joins the host network so a base URL bound on the runner's
+  loopback -- including a port a DinD runner published from an inner container -- is reachable as-is.
+  Optionally mounts /var/run/docker.sock so a spec can drive the app's container through the Docker
+  Engine API (stop/start it and assert the page's reconnect behaviour). On failure the HTML report and
+  test-results are uploaded as an artifact.
+
+inputs:
+  base-url:
+    description: The URL the suite runs against; exported to the container as BASE_URL.
+    required: true
+  spec-dir:
+    description: >-
+      Directory (relative to the workspace) holding the suite's own package.json + package-lock.json
+      and playwright.config.*; `npm ci` and `npx playwright test` run there.
+    required: false
+    default: "."
+  playwright-image:
+    description: >-
+      The Playwright container image. Its Playwright version must match the suite's @playwright/test
+      pin, or the bundled browsers will not match what the package expects.
+    required: false
+    default: mcr.microsoft.com/playwright:v1.63.0-noble
+  mount-docker-socket:
+    description: >-
+      "true" to bind-mount /var/run/docker.sock into the container. This hands the suite root-equivalent
+      control of the runner's Docker daemon (any container, any image, any bind mount) -- only enable it
+      for a suite you own, on a runner that is thrown away after the job.
+    required: false
+    default: "false"
+  extra-args:
+    description: Extra arguments appended to `npx playwright test`, split on whitespace.
+    required: false
+    default: ""
+  report-name:
+    description: Name of the artifact the HTML report and test-results are uploaded under on failure.
+    required: false
+    default: playwright-report
+  container-env:
+    description: >-
+      Newline-separated KEY=VALUE pairs exported into the container (each becomes a `-e`). Blank lines
+      are ignored. Use it for anything the spec needs that is not the base URL, e.g. the name of the
+      container it is allowed to restart.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run the suite in the Playwright container
+      shell: bash
+      # Every input reaches the script through env, never via ${{ }} inside `run:` -- an input is
+      # caller-controlled text and splicing it into a shell line is an injection hole.
+      env:
+        PW_BASE_URL: ${{ inputs.base-url }}
+        PW_SPEC_DIR: ${{ inputs.spec-dir }}
+        PW_IMAGE: ${{ inputs.playwright-image }}
+        PW_MOUNT_SOCKET: ${{ inputs.mount-docker-socket }}
+        PW_EXTRA_ARGS: ${{ inputs.extra-args }}
+        PW_CONTAINER_ENV: ${{ inputs.container-env }}
+      run: |
+        set -euo pipefail
+        args=(run --rm --network host -e CI=1 -e "BASE_URL=$PW_BASE_URL")
+        while IFS= read -r line; do
+          line="${line%$'\r'}"
+          [[ -z "${line// /}" ]] && continue
+          args+=(-e "$line")
+        done <<< "$PW_CONTAINER_ENV"
+        args+=(-v "$GITHUB_WORKSPACE:/work" -w "/work/$PW_SPEC_DIR")
+        if [[ "$PW_MOUNT_SOCKET" == "true" ]]; then
+          args+=(-v /var/run/docker.sock:/var/run/docker.sock)
+        fi
+        read -ra extra <<< "$PW_EXTRA_ARGS"
+        echo "playwright-smoke: image=$PW_IMAGE spec-dir=$PW_SPEC_DIR base-url=$PW_BASE_URL socket=$PW_MOUNT_SOCKET extra-args=(${extra[*]:-})"
+        # The extra args go in as positional parameters of the inner shell ("$@"), so the container
+        # never re-parses them; `exec` makes playwright's exit status the container's, hence the step's.
+        docker "${args[@]}" "$PW_IMAGE" \
+          sh -c 'npm ci --no-audit --no-fund && exec npx playwright test "$@"' sh "${extra[@]}"
+
+    - name: Upload the Playwright report
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.report-name }}
+        path: |
+          ${{ inputs.spec-dir }}/playwright-report
+          ${{ inputs.spec-dir }}/test-results
+        if-no-files-found: ignore
+
+    - name: Re-own what the container wrote
+      # The container runs as root, so node_modules/, playwright-report/ and test-results/ under the
+      # spec dir come out root-owned. Harmless on a throwaway runner; on a persistent one the next
+      # checkout's `git clean` would fail on them. Same image (already pulled), so this costs nothing.
+      if: always()
+      shell: bash
+      env:
+        PW_SPEC_DIR: ${{ inputs.spec-dir }}
+        PW_IMAGE: ${{ inputs.playwright-image }}
+      run: |
+        set -euo pipefail
+        docker run --rm -v "$GITHUB_WORKSPACE:/work" "$PW_IMAGE" \
+          chown -R "$(id -u):$(id -g)" "/work/$PW_SPEC_DIR" || true
