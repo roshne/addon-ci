@@ -117,4 +117,4 @@ runs:
         set -euo pipefail
         docker run --rm -v "$GITHUB_WORKSPACE:/work" "$PW_IMAGE" \
           chown -R "$(id -u):$(id -g)" "/work/$PW_SPEC_DIR" \
-          || echo "playwright-smoke: re-own failed (ignored); files under $PW_SPEC_DIR may stay root-owned" >&2
+          || echo "playwright-smoke: re-own step failed (ignored) -- could be the chown itself or docker/the image being unavailable; files under $PW_SPEC_DIR may stay root-owned either way" >&2

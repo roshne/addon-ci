@@ -184,8 +184,10 @@ Runs a Playwright suite against a URL from inside the calling job, with Chromium
 provided by Playwright's official container image -- for the assertions jsdom
 cannot make (computed styles, media queries, layout, a page reconnecting after
 its server restarts). The suite's own `npm ci` + `npx playwright test` run inside
-the container with the workspace bind-mounted, so nothing is installed on the
-runner; the container joins the host network so a base URL bound on the runner's
+the container with the workspace bind-mounted, so no browsers are installed on
+the runner itself (the container writes `node_modules/`, `playwright-report/`
+and `test-results/` under `spec-dir` on the runner's disk -- see the re-own note
+below); the container joins the host network so a base URL bound on the runner's
 loopback (a port a DinD runner published from an inner container included) is
 reachable as-is. On failure the HTML report and `test-results` are uploaded as
 an artifact.
@@ -196,6 +198,13 @@ runs the suite in a container rather than `playwright install --with-deps` on
 the runner because an ephemeral DinD runner has no apt to install browser
 dependencies into; the official image is the path the std-lib's visual job
 already proves.
+
+`--network host` is Linux-only Docker semantics: both the self-hosted DinD pool
+and `ubuntu-latest` are Linux dockerd, so this works identically on either, but
+the action is not usable from a Windows- or macOS-hosted runner (Docker
+Desktop's VM-backed engine does not support host networking the same way) --
+moot today since the pinned Playwright image is Linux-only anyway and would
+fail to run there first, but worth knowing if that ever changes.
 
 ```yaml
 - uses: roshne/addon-ci/.github/actions/playwright-smoke@main
@@ -224,8 +233,13 @@ runner's next checkout still cleans.
 The first consumer (`Rackbops/artifact-console`'s image ratchet) pins `@main`
 for now: `v1` predates the action, so there is nothing for `@v1` to resolve
 until the tag is next moved deliberately (see **Versioning**), and it switches
-to `@v1` then. That is an interim, unlike the personal-account consumers below,
-which stay on `@main` by design.
+to `@v1` then. That is a third, org-repo category distinct from both
+**Versioning**'s two named ones -- `@v1` for org callers, `@main` by design for
+the personal-account consumers below -- not `@<sha>` (Versioning's own stated
+interim-verification mechanism), because there is no tagged version yet to
+verify *against*; `@main` is this consumer's only option until the first `v1`
+move. Treat this case as specific to a brand-new action with no tag history
+yet, not as precedent for an org repo floating on `@main` once `v1` exists.
 
 ## Versioning
 
