@@ -116,6 +116,63 @@ Requires a `DISCORD_WEBHOOK` repo secret (Discord channel → Integrations →
 Webhooks). `workflow_dispatch` fires a test notification without merging
 anything.
 
+### `push-notify.yml`
+
+Reusable push-to-`main` Discord notification, styled as the webhook's own
+"Github-Repo-Updates" sender rather than Discord's hard-coded `/github`
+integration name. A caller triggers on `push` to its default branch and gets
+one embed per push. Safe to add before the webhook exists — it skips cleanly
+(green) when the caller has no `DISCORD_PUSH_WEBHOOK` secret.
+
+```yaml
+name: push-notify
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    uses: roshne/addon-ci/.github/workflows/push-notify.yml@v1
+    secrets:
+      DISCORD_PUSH_WEBHOOK: ${{ secrets.DISCORD_PUSH_WEBHOOK }}
+    # with: { runner: '["self-hosted","linux"]' }   # optional: run on your own runner
+```
+
+Requires a `DISCORD_PUSH_WEBHOOK` repo secret. Pass it **explicitly**, as
+above — never `secrets: inherit`. A private repo in a free org can't reach
+org-level secrets, so `inherit` still resolves to the inaccessible org secret
+as an empty string and this workflow's guard skips green: CI passes and no
+notification ever posts, silently.
+
+### `python-app.yml`
+
+Reusable Python CI — the Python analog of `lua-test.yml`: define-once,
+call-everywhere, detect-then-run. `pytest` runs whenever `test-paths` exists;
+`ruff check` runs once a ruff config exists (`ruff.toml`/`.ruff.toml` or
+`[tool.ruff]` in `pyproject.toml`), and adds `ruff format --check` too if
+`ruff-format: true`; `mypy` runs once a mypy config exists (`mypy.ini` or
+`[tool.mypy]`/`[mypy]`). Each gate turns on the moment its config file shows
+up — nothing to edit here or at the caller.
+
+Add this job to an existing caller workflow — it has no trigger of its own:
+
+```yaml
+jobs:
+  python:
+    uses: roshne/addon-ci/.github/workflows/python-app.yml@v1
+    with:
+      package-dir: .                    # what ruff/mypy target
+      test-paths: tests
+      requirements: requirements-dev.txt
+      # runner: '["self-hosted","disposable"]'   # optional: run on your own runner
+```
+
+No secret required. All inputs are optional — `python-versions` sets which
+versions to matrix over (default `["3.12"]`), and `package-dir`, `test-paths`,
+`requirements`, `ruff-format`, `mypy-paths`, and `runner` all default to the
+layout shown above.
+
 ## Actions
 
 Composite actions, used as a **step** inside the caller's own job (unlike the
