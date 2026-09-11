@@ -4,7 +4,7 @@ name: lua-test
 #
 #   jobs:
 #     ci:
-#       uses: roshne/addon-ci/.github/workflows/lua-test.yml@main
+#       uses: roshne/addon-ci/.github/workflows/lua-test.yml@v1
 #
 # It lints every repo with luacheck (Lua 5.1, matching WoW's interpreter) and
 # runs busted only when the repo actually has specs — so a one-file addon stays

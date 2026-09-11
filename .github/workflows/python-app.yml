@@ -11,7 +11,7 @@ name: python-app
 #
 #   jobs:
 #     python:
-#       uses: roshne/addon-ci/.github/workflows/python-app.yml@main
+#       uses: roshne/addon-ci/.github/workflows/python-app.yml@v1
 #       with:
 #         package-dir: .                    # what ruff/mypy target
 #         test-paths: tests
