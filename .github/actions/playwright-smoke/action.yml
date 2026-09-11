@@ -36,7 +36,10 @@ inputs:
     required: false
     default: "false"
   extra-args:
-    description: Extra arguments appended to `npx playwright test`, split on whitespace.
+    description: >-
+      Extra arguments appended to `npx playwright test`, split on whitespace only -- shell quoting is
+      not interpreted, so an argument cannot contain a space (`--grep auth.flow`, not `--grep "auth
+      flow"`).
     required: false
     default: ""
   report-name:
@@ -46,8 +49,9 @@ inputs:
   container-env:
     description: >-
       Newline-separated KEY=VALUE pairs exported into the container (each becomes a `-e`). Blank lines
-      are ignored. Use it for anything the spec needs that is not the base URL, e.g. the name of the
-      container it is allowed to restart.
+      are ignored, surrounding whitespace is trimmed, and a line without `=` fails the step (a bare
+      name would forward the runner's own variable). Use it for anything the spec needs that is not the
+      base URL, e.g. the name of the container it is allowed to restart.
     required: false
     default: ""
 
@@ -68,9 +72,15 @@ runs:
       run: |
         set -euo pipefail
         args=(run --rm --network host -e CI=1 -e "BASE_URL=$PW_BASE_URL")
-        while IFS= read -r line; do
+        # `read -r` with the default IFS trims leading/trailing whitespace (tabs included); a line with no
+        # `=` is refused because `docker -e NAME` alone would forward the RUNNER's variable of that name.
+        while read -r line; do
           line="${line%$'\r'}"
-          [[ -z "${line// /}" ]] && continue
+          [[ -z "$line" ]] && continue
+          if [[ "$line" != *=* ]]; then
+            echo "playwright-smoke: container-env line has no '=': '$line' (KEY=VALUE per line)" >&2
+            exit 1
+          fi
           args+=(-e "$line")
         done <<< "$PW_CONTAINER_ENV"
         args+=(-v "$GITHUB_WORKSPACE:/work" -w "/work/$PW_SPEC_DIR")
@@ -106,4 +116,5 @@ runs:
       run: |
         set -euo pipefail
         docker run --rm -v "$GITHUB_WORKSPACE:/work" "$PW_IMAGE" \
-          chown -R "$(id -u):$(id -g)" "/work/$PW_SPEC_DIR" || true
+          chown -R "$(id -u):$(id -g)" "/work/$PW_SPEC_DIR" \
+          || echo "playwright-smoke: re-own failed (ignored); files under $PW_SPEC_DIR may stay root-owned" >&2

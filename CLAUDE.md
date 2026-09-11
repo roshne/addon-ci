@@ -3,7 +3,8 @@
 Centralized, **reusable** GitHub Actions workflows (`on: workflow_call`) for roshne's WoW addon
 repos, so CI/release tooling lives in one place instead of being copy-pasted (and drifting) across
 every repo. **This is not an addon and not an app** -- it ships no runtime code; consumers call its
-workflows with `uses: roshne/addon-ci/.github/workflows/<file>.yml@v1`. The repo is **public**.
+workflows with `uses: roshne/addon-ci/.github/workflows/<file>.yml@v1`, and its one composite action
+as a step with `uses: roshne/addon-ci/.github/actions/<name>@<ref>`. The repo is **public**.
 
 My personal `~/.claude/CLAUDE.md` governs *how I work* -- the review gate, escalation, git &
 shipping, commit mechanics, search-tool routing, and shell choice. It is **not restated here**; this
@@ -41,6 +42,7 @@ personal-account consumers below stay on `@main` by design -- same disclosure as
 
 - **A workflow file's path is the contract.** Renaming or moving `<file>.yml` breaks every caller's
   `uses:` line invisibly -- the failure lands in the *consumer's* pipeline, caught by no check here.
+  The same holds for an action's directory (`.github/actions/<name>/action.yml`) and its input names.
 - **A backward-incompatible change** to a workflow's inputs, required secrets, or behaviour must ship
   as a new `v2` tag, never by moving `v1` onto it -- moving `v1` ripples to all consumers at once.
   Treat retargeting `v1` to a breaking change as a shipped-identifier change -> **stop and escalate**

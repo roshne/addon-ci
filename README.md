@@ -156,17 +156,19 @@ already proves.
 | `spec-dir` | no | `.` | Directory (relative to the workspace) with the suite's own `package.json` + `package-lock.json` and `playwright.config.*`; `npm ci` and `npx playwright test` run there. |
 | `playwright-image` | no | `mcr.microsoft.com/playwright:v1.63.0-noble` | The Playwright container image. Its version must match the suite's `@playwright/test` pin. |
 | `mount-docker-socket` | no | `"false"` | `"true"` bind-mounts `/var/run/docker.sock` so the spec can drive containers through the Docker Engine API (stop/start the app and assert the page reconnects). This is root-equivalent control of the runner's daemon -- only for a suite you own, on a runner thrown away after the job. |
-| `extra-args` | no | `""` | Extra arguments for `npx playwright test`, split on whitespace. |
+| `extra-args` | no | `""` | Extra arguments for `npx playwright test`, split on whitespace only -- shell quoting is not interpreted, so no argument can contain a space. |
 | `report-name` | no | `playwright-report` | Artifact name for the report uploaded on failure. |
-| `container-env` | no | `""` | Newline-separated `KEY=VALUE` pairs exported into the container. |
+| `container-env` | no | `""` | Newline-separated `KEY=VALUE` pairs exported into the container. Blank lines ignored, whitespace trimmed; a line without `=` fails the step. |
 
 Files the container writes under `spec-dir` (`node_modules/`, `playwright-report/`,
 `test-results/`) are re-owned to the runner user afterwards, so a persistent
 runner's next checkout still cleans.
 
-The first consumer (`Rackbops/artifact-console`'s image ratchet) pins `@main`,
-the way the personal-account consumers below do; the `v1` tag was not moved for
-it (see **Versioning**).
+The first consumer (`Rackbops/artifact-console`'s image ratchet) pins `@main`
+for now: `v1` predates the action, so there is nothing for `@v1` to resolve
+until the tag is next moved deliberately (see **Versioning**), and it switches
+to `@v1` then. That is an interim, unlike the personal-account consumers below,
+which stay on `@main` by design.
 
 ## Versioning
 
