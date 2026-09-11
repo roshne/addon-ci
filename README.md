@@ -23,11 +23,8 @@ on:
 
 jobs:
   ci:
-    uses: roshne/addon-ci/.github/workflows/lua-test.yml@main
+    uses: roshne/addon-ci/.github/workflows/lua-test.yml@v1
 ```
-
-Update the workflow here once and every repo pointing at `@main` picks it up on
-its next run.
 
 ### `release.yml`
 
@@ -58,7 +55,7 @@ concurrency:
 
 jobs:
   release:
-    uses: roshne/addon-ci/.github/workflows/release.yml@main
+    uses: roshne/addon-ci/.github/workflows/release.yml@v1
     secrets: inherit
 ```
 
@@ -84,7 +81,7 @@ on:
 
 jobs:
   curseforge:
-    uses: roshne/addon-ci/.github/workflows/publish.yml@main
+    uses: roshne/addon-ci/.github/workflows/publish.yml@v1
     secrets: inherit
 ```
 
@@ -111,13 +108,32 @@ on:
 jobs:
   notify:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
-    uses: roshne/addon-ci/.github/workflows/discord.yml@main
+    uses: roshne/addon-ci/.github/workflows/discord.yml@v1
     secrets: inherit
 ```
 
 Requires a `DISCORD_WEBHOOK` repo secret (Discord channel → Integrations →
 Webhooks). `workflow_dispatch` fires a test notification without merging
 anything.
+
+## Versioning
+
+Callers pin `@v1`, not `@main`. A change lands on `main` and is verified on
+one caller first -- point that caller at `@<sha>` temporarily, or use a
+scratch repo -- before it's *released* to everyone else by moving the tag
+deliberately:
+
+```bash
+git tag -f v1 <sha> && git push -f origin v1
+```
+
+Merging to `main` alone changes nothing for existing callers; only moving the
+tag does. A breaking change to a workflow's inputs or secrets gets a `v2` tag
+instead, so callers move on their own schedule rather than breaking on their
+next run.
+
+`@main` still works for the personal-account repos listed below -- it's just
+no longer the documented way to consume these workflows.
 
 ## Consumers
 

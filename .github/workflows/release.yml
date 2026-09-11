@@ -19,7 +19,7 @@ name: release
 #     cancel-in-progress: false
 #   jobs:
 #     release:
-#       uses: roshne/addon-ci/.github/workflows/release.yml@main
+#       uses: roshne/addon-ci/.github/workflows/release.yml@v1
 #       secrets: inherit
 on:
   workflow_call:

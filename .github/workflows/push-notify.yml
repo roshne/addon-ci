@@ -14,7 +14,7 @@ name: push-notify
 #       branches: [main]
 #   jobs:
 #     notify:
-#       uses: roshne/addon-ci/.github/workflows/push-notify.yml@main
+#       uses: roshne/addon-ci/.github/workflows/push-notify.yml@v1
 #       secrets:
 #         DISCORD_PUSH_WEBHOOK: ${{ secrets.DISCORD_PUSH_WEBHOOK }}
 #       # with: { runner: '["self-hosted","linux"]' }   # optional: run on your own runner

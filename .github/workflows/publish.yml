@@ -13,7 +13,7 @@ name: publish
 #     workflow_dispatch:
 #   jobs:
 #     curseforge:
-#       uses: roshne/addon-ci/.github/workflows/publish.yml@main
+#       uses: roshne/addon-ci/.github/workflows/publish.yml@v1
 #       secrets: inherit
 on:
   workflow_call:
