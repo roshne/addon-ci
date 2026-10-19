@@ -220,7 +220,7 @@ fail to run there first, but worth knowing if that ever changes.
 |---|---|---|---|
 | `base-url` | yes | -- | The URL the suite runs against; exported to the container as `BASE_URL`. |
 | `spec-dir` | no | `.` | Directory (relative to the workspace) with the suite's own `package.json` + `package-lock.json` and `playwright.config.*`; `npm ci` and `npx playwright test` run there. |
-| `playwright-image` | no | `mcr.microsoft.com/playwright:v1.63.0-noble` | The Playwright container image. Its version must match the suite's `@playwright/test` pin. |
+| `playwright-image` | no | `mcr.microsoft.com/playwright:v1.64.1-noble` | The Playwright container image. Its version must match the suite's `@playwright/test` pin. |
 | `mount-docker-socket` | no | `"false"` | `"true"` bind-mounts `/var/run/docker.sock` so the spec can drive containers through the Docker Engine API (stop/start the app and assert the page reconnects). This is root-equivalent control of the runner's daemon -- only for a suite you own, on a runner thrown away after the job. |
 | `extra-args` | no | `""` | Extra arguments for `npx playwright test`, split on whitespace only -- shell quoting is not interpreted, so no argument can contain a space. |
 | `report-name` | no | `playwright-report` | Artifact name for the report uploaded on failure. |
