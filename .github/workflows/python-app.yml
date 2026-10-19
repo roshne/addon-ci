@@ -68,7 +68,9 @@ on:
 jobs:
   quality:
     runs-on: ${{ fromJSON(inputs.runner) }}
-    timeout-minutes: 15
+    # 20, not 15: 15 cancelled Rackbops/Tooling's suite mid-run on r720's slower disposable
+    # runners (2026-10-17: pytest at 93%, nothing failing).
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: ${{ fromJSON(inputs.python-versions) }}
