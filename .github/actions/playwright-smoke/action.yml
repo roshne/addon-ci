@@ -27,7 +27,7 @@ inputs:
       The Playwright container image. Its Playwright version must match the suite's @playwright/test
       pin, or the bundled browsers will not match what the package expects.
     required: false
-    default: mcr.microsoft.com/playwright:v1.63.0-noble
+    default: mcr.microsoft.com/playwright:v1.64.1-noble
   mount-docker-socket:
     description: >-
       "true" to bind-mount /var/run/docker.sock into the container. This hands the suite root-equivalent
