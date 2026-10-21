@@ -169,7 +169,7 @@ jobs:
 ```
 
 No secret required. All inputs are optional — `python-versions` sets which
-versions to matrix over (default `["3.12"]`), and `package-dir`, `test-paths`,
+versions to matrix over (default `["3.14"]`), and `package-dir`, `test-paths`,
 `requirements`, `ruff-format`, `mypy-paths`, and `runner` all default to the
 layout shown above.
 
