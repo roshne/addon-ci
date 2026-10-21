@@ -34,7 +34,7 @@ on:
       python-versions:
         description: "JSON array of Python versions to matrix over."
         type: string
-        default: '["3.12"]'
+        default: '["3.14"]'
       package-dir:
         description: "Directory ruff/mypy target (and where their config is looked for)."
         type: string
