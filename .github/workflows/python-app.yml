@@ -69,7 +69,7 @@ jobs:
   quality:
     runs-on: ${{ fromJSON(inputs.runner) }}
     # 25, not 20: 20 cancelled Rackbops/Tooling's suite on r720's slower disposable runners
-    # three times (2026-10-19 and 2026-10-23: pytest at 96%, nothing failing); 15 did the same
+    # four times (2026-10-19 and 2026-10-23: pytest at 92-96%, nothing failing); 15 did the same
     # on 2026-10-17.
     timeout-minutes: 25
     strategy:
